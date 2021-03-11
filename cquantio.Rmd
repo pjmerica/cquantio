@@ -1,0 +1,140 @@
+---
+title: "CquantExam"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+```{r}
+#used for handiling dates more easily
+library(lubridate)
+#using for joining and more data munging
+library(tidyverse)
+#Library for Graphing
+library(ggplot2)
+#library for string detecting
+library(stringr)
+#Used for trying to normalize data in final bonus task
+library(BBmisc)
+
+```
+
+
+## Task 1
+
+```{r}
+#Reading in all files, making sure strings aren't readin as  factors
+Price2016 = read.csv("ERCOT_DA_Prices_2016.csv", stringsAsFactors = F)
+Price2017 = read.csv("ERCOT_DA_Prices_2017.csv", stringsAsFactors = F)
+Price2018 = read.csv("ERCOT_DA_Prices_2018.csv", stringsAsFactors = F)
+Price2019 = read.csv("ERCOT_DA_Prices_2019.csv", stringsAsFactors = F)
+
+#Compiling them all into one file
+UltimatePrice = rbind(Price2016,Price2017,Price2018,Price2019)
+#head(UltimatePrice)
+```
+
+## Task 2
+
+```{r}
+#Creating table average asked in question, using lubridate for the first part
+Task2avg = UltimatePrice %>% mutate(year = year(Date), month = month(Date)) %>% group_by( month,SettlementPoint, year) %>% summarize(AvgPrice = mean(Price))
+#head(Task2avg)
+
+
+```
+
+## Task 3 
+```{r}
+#Creating CSV file from table above
+write.csv(Task2avg, "AveragePriceByMonth.csv")
+```
+
+## Task 4
+```{r}
+# creating new safe datasert to edit/play with
+UltimatePrice2 = UltimatePrice
+#Creating column for Price Volarility
+Volatility = UltimatePrice2 %>% mutate(year = year(Date), month = month(Date)) %>% group_by( month,SettlementPoint, year) %>% 
+  filter(str_detect(SettlementPoint, "HB"),Price > 0) %>% summarize(HourlyVolatility = var(log(Price)))
+
+Volatility = Volatility[,2:4]
+#Volatility
+```
+
+## Task 5
+```{r}
+#Writing above table to a CSV file
+write.csv(Volatility, "HourlyVolatilityByYear.csv")
+```
+
+## Task 6 
+```{r}
+#Grouping by year and finding highest volatility
+maxVolatility = Volatility %>% group_by(year) %>% filter(HourlyVolatility == max(HourlyVolatility))
+```
+
+
+
+## Task 7
+```{r}
+#Looking at data format I'm supposed to immitate
+example = read.csv("Spot_ISONE_Node1.csv", stringsAsFactors = F)
+#example
+#head(UltimatePrice)
+#USing this to see how many settlement points there are and confirming it is 15. Then using the names for filtering later
+Settlementschar = unique(UltimatePrice$SettlementPoint) 
+#Settlementschar[1]
+#Creating for loop for all Settlement hubs
+  for(i in 1:15){
+    #Formatting data like the example file
+    Newfile = UltimatePrice %>% filter(SettlementPoint == Settlementschar[i]) %>% mutate(hour = hour(Date), Date =  substr(Date, 0, 10)) %>%  spread(hour, Price) %>% rename(Variable = SettlementPoint, X1 = '0', X2 ='1', X3 = '2', X4 = '3', X5 = '4', X6 = '5', X7 ='6', X8= '7', X9 = '8', X10 ='9', X11 = '10', X12 = '11', X13 = '12', X14 = '13', X15= '14', X16='15', X17 ='16', X18 = '17', X19 = '18', X20 = '19', X21 = '20', X22 = '21', X23 = '22', X24 ='23')
+    #Writing out all the data and saving it to specified folder in question. Take out path part when u run the code.
+    path = "C:/Users/paul.merica/Documents/formattedSpotHistory"
+     write.csv(Newfile, file.path(path,paste0("spot_", Settlementschar[i], ".csv")))
+  }
+  
+
+```
+
+
+## Bonus Task 1: Mean Plots
+
+```{r}
+#will come back if time permits, would just do more labelling and fix that x axis. But this stuff is time consuming
+#Make first plot
+Hub_boys= Task2avg %>% filter(str_detect(SettlementPoint, "HB")) 
+summary(Hub_boys)
+ggplot(Hub_boys, aes(x = month, y = AvgPrice, color = SettlementPoint)) + geom_line()
+
+#Making the second plot 
+LZ_boys= Task2avg %>% filter(str_detect(SettlementPoint, "LZ")) 
+summary(LZ_boys)
+ggplot(LZ_boys, aes(x = month, y = AvgPrice, color = SettlementPoint)) + geom_line()
+
+```
+
+## Bonus Task 2: Volatility Plots
+```{r}
+#Same as above with new stuff aka the Volatility data set, would come back and clean it up a bit much like the above graph
+#summary(Hub_boysVol)
+ggplot(Volatility, aes(x = year, y = HourlyVolatility, fill = SettlementPoint)) + geom_bar(position="dodge", stat="identity")
+```
+
+## Bonus Task 3: Hourly Shape Profile Computation
+```{r}
+# Figuring out how this thing is supposed to work. Doing it for one day first then we can translate it to a function/for loop like task 7. Need to normalize for each 24 hour independently according to my interpretation. So I am doing that below with it grouped to each day and hour cycle.
+
+Test = UltimatePrice %>% filter(SettlementPoint == "HB_BUSAVG") %>% mutate(year = year(Date), hour = hour(Date), month = month(Date), day = day(Date)) %>% group_by(year,day, hour) %>% mutate(PriceNormal = normalize(Price))
+
+Test
+#Testing to see if it sums to one. Spoiler it does not.
+sum(Test[1:12,8])/12
+```
+
